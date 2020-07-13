@@ -1,3 +1,12 @@
+Changes from Ant 1.10.8 TO Ant 1.10.9
+=====================================
+
+Fixed bugs:
+-----------
+
+ * the ftp task could throw a NullPointerException if an error occured
+   Bugzilla Report 64438
+
 Changes from Ant 1.10.7 TO Ant 1.10.8
 =====================================
 
@@ -53,6 +62,12 @@ Other changes:
  * tstamp task now honors SOURCE_DATE_EPOCH environment variable for
    reproducible builds (https://reproducible-builds.org/specs/source-date-epoch/#idm55)
    Bugzilla Report 62617
+
+ * rmic has been removed from Java 15. The task will now throw an
+   exception if you try to use it while running Java 15 or newer.
+
+ * a new property ant.tmpdir provides improved control over the
+   location Ant uses to create temporary files
 
 Changes from Ant 1.10.6 TO Ant 1.10.7
 =====================================

@@ -36,9 +36,14 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.FileAttribute;
+import java.nio.file.attribute.PosixFileAttributeView;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -50,6 +55,7 @@ import java.util.jar.JarFile;
 import java.util.stream.Collectors;
 
 import org.apache.tools.ant.BuildException;
+import org.apache.tools.ant.MagicNames;
 import org.apache.tools.ant.PathTokenizer;
 import org.apache.tools.ant.Project;
 import org.apache.tools.ant.launch.Locator;
@@ -98,6 +104,13 @@ public class FileUtils {
      * than 1 millisecond, so we round this up to 1 millisecond.
      */
     public static final long NTFS_FILE_TIMESTAMP_GRANULARITY = 1;
+
+    private static final FileAttribute[] TMPFILE_ATTRIBUTES =
+        new FileAttribute[] {
+            PosixFilePermissions.asFileAttribute(EnumSet.of(PosixFilePermission.OWNER_READ,
+                PosixFilePermission.OWNER_WRITE))
+        };
+    private static final FileAttribute[] NO_TMPFILE_ATTRIBUTES = new FileAttribute[0];
 
     /**
      * A one item cache for fromUri.
@@ -891,19 +904,19 @@ public class FileUtils {
      * this method was invoked, any subsequent invocation of this method will
      * yield a different file name.
      * </p>
-     * <p>
-     * The filename is prefixNNNNNsuffix where NNNN is a random number.
-     * </p>
      *
-     * @param prefix
-     *            prefix before the random number.
+     * <p>If the filesystem where the temporary file is created
+     * supports POSIX permissions, the file will only be readable and
+     * writable by the current user.</p>
+     *
+     * @param prefix file name prefix.
      * @param suffix
      *            file extension; include the '.'.
      * @param parentDir
      *            Directory to create the temporary file in; java.io.tmpdir used
      *            if not specified.
      *
-     * @deprecated since ant 1.7.1 use createTempFile(String, String, File,
+     * @deprecated since ant 1.7.1 use createTempFile(Project, String, String, File,
      * boolean, boolean) instead.
      * @return a File reference to the new, nonexistent temporary file.
      */
@@ -912,8 +925,6 @@ public class FileUtils {
         return createTempFile(prefix, suffix, parentDir, false, false);
     }
 
-    private static final String NULL_PLACEHOLDER = "null";
-
     /**
      * Create a temporary file in a given directory.
      *
@@ -921,7 +932,11 @@ public class FileUtils {
      * exist before this method was invoked, any subsequent invocation
      * of this method will yield a different file name.</p>
      *
-     * @param prefix prefix before the random number.
+     * <p>If the filesystem where the temporary file is created
+     * supports POSIX permissions, the file will only be readable and
+     * writable by the current user.</p>
+     *
+     * @param prefix file name prefix.
      * @param suffix file extension; include the '.'.
      * @param parentDir Directory to create the temporary file in;
      * java.io.tmpdir used if not specified.
@@ -934,13 +949,56 @@ public class FileUtils {
      *
      * @return a File reference to the new temporary file.
      * @since Ant 1.7.1
+     * @deprecated since Ant 1.10.8 use createTempFile(Project, String, String, File,
+     * boolean, boolean) instead.
      */
+    @Deprecated
     public File createTempFile(String prefix, String suffix, File parentDir,
             boolean deleteOnExit, boolean createFile) {
+        return createTempFile(null, prefix, suffix, parentDir, deleteOnExit, createFile);
+    }
+
+    private static final String NULL_PLACEHOLDER = "null";
+
+    /**
+     * Create a temporary file in a given directory.
+     *
+     * <p>The file denoted by the returned abstract pathname did not
+     * exist before this method was invoked, any subsequent invocation
+     * of this method will yield a different file name.</p>
+     *
+     * <p>If the filesystem where the temporary file is created
+     * supports POSIX permissions, the file will only be readable and
+     * writable by the current user.</p>
+     *
+     * @param project reference to the current Ant project.
+     * @param prefix file name prefix.
+     * @param suffix file extension; include the '.'.
+     * @param parentDir Directory to create the temporary file in;
+     *        if not specified and {@code project} is not null then the value
+     *        of the property {@code ant.tmpdir} is used if set;
+     *        otherwise {@code java.io.tmpdir} is used.
+     * @param deleteOnExit whether to set the tempfile for deletion on
+     *        normal VM exit.
+     * @param createFile true if the file must actually be created. If false
+     * chances exist that a file with the same name is created in the time
+     * between invoking this method and the moment the file is actually created.
+     * If possible set to true.
+     *
+     * @return a File reference to the new temporary file.
+     * @since Ant 1.9.15
+     */
+    public File createTempFile(final Project project, String prefix, String suffix,
+            final File parentDir, final boolean deleteOnExit, final boolean createFile) {
         File result;
-        String parent = (parentDir == null)
-                ? System.getProperty("java.io.tmpdir")
-                : parentDir.getPath();
+        final String parent;
+        if (parentDir != null) {
+            parent = parentDir.getPath();
+        } else if (project != null && project.getProperty(MagicNames.TMPDIR) != null) {
+            parent = project.getProperty(MagicNames.TMPDIR);
+        } else {
+            parent = System.getProperty("java.io.tmpdir");
+        }
         if (prefix == null) {
             prefix = NULL_PLACEHOLDER;
         }
@@ -950,7 +1008,12 @@ public class FileUtils {
 
         if (createFile) {
             try {
-                result = File.createTempFile(prefix, suffix, new File(parent));
+                final Path parentPath = new File(parent).toPath();
+                final PosixFileAttributeView parentPosixAttributes =
+                    Files.getFileAttributeView(parentPath, PosixFileAttributeView.class);
+                result = Files.createTempFile(parentPath, prefix, suffix,
+                    parentPosixAttributes != null ? TMPFILE_ATTRIBUTES : NO_TMPFILE_ATTRIBUTES)
+                    .toFile();
             } catch (IOException e) {
                 throw new BuildException("Could not create tempfile in "
                         + parent, e);
@@ -980,12 +1043,12 @@ public class FileUtils {
      * this method was invoked, any subsequent invocation of this method will
      * yield a different file name.
      * </p>
-     * <p>
-     * The filename is prefixNNNNNsuffix where NNNN is a random number.
-     * </p>
      *
-     * @param prefix
-     *            prefix before the random number.
+     * <p>If the filesystem where the temporary file is created
+     * supports POSIX permissions, the file will only be readable and
+     * writable by the current user.</p>
+     *
+     * @param prefix file name prefix.
      * @param suffix
      *            file extension; include the '.'.
      * @param parentDir
@@ -994,7 +1057,7 @@ public class FileUtils {
      * @param deleteOnExit
      *            whether to set the tempfile for deletion on normal VM exit.
      *
-     * @deprecated since ant 1.7.1 use createTempFile(String, String, File,
+     * @deprecated since ant 1.7.1 use createTempFile(Project, String, String, File,
      * boolean, boolean) instead.
      * @return a File reference to the new, nonexistent temporary file.
      */

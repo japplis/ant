@@ -2058,7 +2058,7 @@ public class FTP extends Task implements FTPTaskConfig {
         FTPFile[] files = null;
         final int maxIterations = 1000;
         for (int counter = 1; counter < maxIterations; counter++) {
-            File localFile = FILE_UTILS.createTempFile(
+            File localFile = FILE_UTILS.createTempFile(getProject(),
                                                        "ant" + Integer.toString(counter), ".tmp",
                                                        null, false, false);
             String fileName = localFile.getName();
@@ -2611,9 +2611,10 @@ public class FTP extends Task implements FTPTaskConfig {
             }
 
         } catch (IOException ex) {
-            String cause = ex.getCause().toString();
+            final Throwable cause = ex.getCause();
             if (cause != null) {
-                if (cause.contains("java.net.SocketTimeoutException")) {
+                final String msg = cause.toString();
+                if (msg != null && msg.contains("java.net.SocketTimeoutException")) {
                     // When a read timeout occurs, inform the server that it
                     // should abort.
                     // Note that the latest commons-net (3.6) still does not

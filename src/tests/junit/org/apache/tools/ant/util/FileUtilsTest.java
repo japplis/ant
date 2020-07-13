@@ -24,11 +24,15 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.PosixFileAttributeView;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 
 import org.apache.tools.ant.BuildException;
 import org.apache.tools.ant.MagicTestNames;
+import org.apache.tools.ant.Project;
 import org.apache.tools.ant.taskdefs.condition.Os;
 import org.junit.Before;
 import org.junit.Rule;
@@ -39,7 +43,9 @@ import org.junit.rules.TemporaryFolder;
 import static org.apache.tools.ant.util.FileUtils.getFileUtils;
 import static org.apache.tools.ant.util.FileUtils.isCaseSensitiveFileSystem;
 import static org.apache.tools.ant.util.FileUtils.isContextRelativePath;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.endsWith;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.startsWith;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -355,20 +361,53 @@ public class FileUtilsTest {
      */
     @Test
     public void testCreateTempFile() throws IOException {
-        // null parent dir
-        File tmp1 = getFileUtils().createTempFile("pre", ".suf", null, false, true);
-        String tmploc = System.getProperty("java.io.tmpdir");
+        final String tmploc = System.getProperty("java.io.tmpdir");
+        final Project projectWithoutTempDir = new Project();
+        final Project projectWithTempDir = new Project();
+        final File projectTmpDir = folder.newFolder("subdir");
+        projectWithTempDir.setProperty("ant.tmpdir", projectTmpDir.getAbsolutePath());
+
+        // null parent dir, null project
+        File tmp1 = getFileUtils().createTempFile(null, "pre", ".suf", null, false, true);
         String name = tmp1.getName();
         assertThat("starts with pre", name, startsWith("pre"));
         assertThat("ends with .suf", name, endsWith(".suf"));
         assertTrue("File was created", tmp1.exists());
         assertEquals((new File(tmploc, tmp1.getName())).getAbsolutePath(),
                 tmp1.getAbsolutePath());
+        final PosixFileAttributeView attributes =
+            Files.getFileAttributeView(tmp1.toPath(), PosixFileAttributeView.class);
+        if (attributes != null) {
+            final Set<PosixFilePermission> perm = attributes.readAttributes().permissions();
+            assertThat(perm,
+                containsInAnyOrder(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE));
+            assertThat(perm, hasSize(2));
+        }
+        tmp1.delete();
+
+        // null parent dir, project without magic property
+        tmp1 = getFileUtils().createTempFile(projectWithoutTempDir, "pre", ".suf", null, false, true);
+        name = tmp1.getName();
+        assertTrue("starts with pre", name.startsWith("pre"));
+        assertTrue("ends with .suf", name.endsWith(".suf"));
+        assertTrue("File was created", tmp1.exists());
+        assertEquals((new File(tmploc, tmp1.getName())).getAbsolutePath(), tmp1
+                .getAbsolutePath());
+        tmp1.delete();
+
+        // null parent dir, project with magic property
+        tmp1 = getFileUtils().createTempFile(projectWithTempDir, "pre", ".suf", null, false, true);
+        name = tmp1.getName();
+        assertTrue("starts with pre", name.startsWith("pre"));
+        assertTrue("ends with .suf", name.endsWith(".suf"));
+        assertTrue("File was created", tmp1.exists());
+        assertEquals((new File(projectTmpDir, tmp1.getName())).getAbsolutePath(), tmp1
+                .getAbsolutePath());
         tmp1.delete();
 
         File dir2 = folder.newFolder("ant-test");
 
-        File tmp2 = getFileUtils().createTempFile("pre", ".suf", dir2, true, true);
+        File tmp2 = getFileUtils().createTempFile(null, "pre", ".suf", dir2, true, true);
         String name2 = tmp2.getName();
         assertThat("starts with pre", name2, startsWith("pre"));
         assertThat("ends with .suf", name2, endsWith(".suf"));
@@ -376,6 +415,25 @@ public class FileUtilsTest {
         assertEquals((new File(dir2, tmp2.getName())).getAbsolutePath(),
                 tmp2.getAbsolutePath());
         tmp2.delete();
+
+        tmp2 = getFileUtils().createTempFile(projectWithoutTempDir, "pre", ".suf", dir2, true, true);
+        name2 = tmp2.getName();
+        assertTrue("starts with pre", name2.startsWith("pre"));
+        assertTrue("ends with .suf", name2.endsWith(".suf"));
+        assertTrue("File was created", tmp2.exists());
+        assertEquals((new File(dir2, tmp2.getName())).getAbsolutePath(), tmp2
+                .getAbsolutePath());
+        tmp2.delete();
+
+        tmp2 = getFileUtils().createTempFile(projectWithTempDir, "pre", ".suf", dir2, true, true);
+        name2 = tmp2.getName();
+        assertTrue("starts with pre", name2.startsWith("pre"));
+        assertTrue("ends with .suf", name2.endsWith(".suf"));
+        assertTrue("File was created", tmp2.exists());
+        assertEquals((new File(dir2, tmp2.getName())).getAbsolutePath(), tmp2
+                .getAbsolutePath());
+        tmp2.delete();
+        dir2.delete();
 
         File parent = new File((new File("/tmp")).getAbsolutePath());
         tmp1 = getFileUtils().createTempFile("pre", ".suf", parent, false);
@@ -388,13 +446,8 @@ public class FileUtilsTest {
                 .getParent());
 
         tmp2 = getFileUtils().createTempFile("pre", ".suf", parent, false);
-        assertNotEquals("files are different", tmp1.getAbsolutePath(), tmp2.getAbsolutePath());
-
-        // null parent dir
-        File tmp3 = getFileUtils().createTempFile("pre", ".suf", null, false);
-        tmploc = System.getProperty("java.io.tmpdir");
-        assertEquals((new File(tmploc, tmp3.getName())).getAbsolutePath(),
-                tmp3.getAbsolutePath());
+        assertTrue("files are different", !tmp1.getAbsolutePath().equals(
+                tmp2.getAbsolutePath()));
     }
 
     /**
