@@ -208,10 +208,17 @@ public final class MagicNames {
     public static final String REFID_LOCAL_PROPERTIES = "ant.LocalProperties";
 
     /**
+     * Name of Ant core package
+     * Value: {@value}
+     * @since Ant 1.10.9
+     */
+    public static final String ANT_CORE_PACKAGE = "org.apache.tools.ant";
+
+    /**
      * Name of JVM system property which provides the name of the ProjectHelper class to use.
      * Value: {@value}
      */
-    public static final String PROJECT_HELPER_CLASS = "org.apache.tools.ant.ProjectHelper";
+    public static final String PROJECT_HELPER_CLASS = ANT_CORE_PACKAGE + ".ProjectHelper";
 
     /**
      * The service identifier in jars which provide ProjectHelper implementations.
@@ -330,5 +337,27 @@ public final class MagicNames {
      * @since Ant 1.10.8
      */
     public static final String TMPDIR = "ant.tmpdir";
+
+    /**
+     * Magic property that will be set to override java.io.tmpdir
+     * system property as the location for Ant's default temporary
+     * directory if a temp file is created and {@link #TMPDIR} is not
+     * set.
+     * Value: {@value}
+     * @since Ant 1.10.9
+     */
+    public static final String AUTO_TMPDIR = "ant.auto.tmpdir";
+
+    /**
+     * Magic property that can be used to disable Nashorn compatibility mode when using GraalVM JavaScript as script
+     * engine.
+     *
+     * <p>Set this to "true" if you want to disable Nashorn compatibility mode.</p>
+     *
+     * Value: {@value}
+     * @since Ant 1.10.9
+     */
+    public static final String DISABLE_NASHORN_COMPAT = "ant.disable.graal.nashorn.compat";
+
 }
 

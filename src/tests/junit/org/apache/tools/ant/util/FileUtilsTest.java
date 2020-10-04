@@ -50,6 +50,8 @@ import static org.hamcrest.Matchers.startsWith;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeFalse;
@@ -450,6 +452,68 @@ public class FileUtilsTest {
                 tmp2.getAbsolutePath()));
     }
 
+    @Test
+    public void createTempFileUsesAntTmpDirIfSetAndDeleteOnExitIsTrue() throws IOException {
+        final Project project = new Project();
+        final File projectTmpDir = folder.newFolder("subdir");
+        project.setProperty("ant.tmpdir", projectTmpDir.getAbsolutePath());
+        final File tmpFile = getFileUtils().createTempFile(project, null, null, null, true, true);
+        assertTrue(tmpFile + " must be child of " + projectTmpDir,
+                   tmpFile.getAbsolutePath().startsWith(projectTmpDir.getAbsolutePath()));
+    }
+
+    @Test
+    public void createTempFileUsesAntTmpDirIfSetAndDeleteOnExitIsFalse() throws IOException {
+        final Project project = new Project();
+        final File projectTmpDir = folder.newFolder("subdir");
+        project.setProperty("ant.tmpdir", projectTmpDir.getAbsolutePath());
+        final File tmpFile = getFileUtils().createTempFile(project, null, null, null, false, true);
+        assertTrue(tmpFile + " must be child of " + projectTmpDir,
+                   tmpFile.getAbsolutePath().startsWith(projectTmpDir.getAbsolutePath()));
+    }
+
+    @Test
+    public void createTempFileCreatesAutoTmpDirIfDeleteOnExitIsTrueOnUnix() throws IOException {
+        assumeFalse("Test doesn't run on DOS", Os.isFamily("dos"));
+        final Project project = new Project();
+        final File tmpFile = getFileUtils().createTempFile(project, null, null, null, true, true);
+        final String autoTempDir = project.getProperty("ant.auto.tmpdir");
+        assertNotNull(autoTempDir);
+        assertTrue(tmpFile + " must be child of " + autoTempDir,
+                   tmpFile.getAbsolutePath().startsWith(autoTempDir));
+    }
+
+    @Test
+    public void createTempFileDoesntCreateAutoTmpDirIfDeleteOnExitIsFalse() throws IOException {
+        final Project project = new Project();
+        final File tmpFile = getFileUtils().createTempFile(project, null, null, null, false, true);
+        assertNull(project.getProperty("ant.auto.tmpdir"));
+    }
+
+    @Test
+    public void createTempFileReusesAutoTmpDirIfDeleteOnExitIsTrueOnUnix() throws IOException {
+        assumeFalse("Test doesn't run on DOS", Os.isFamily("dos"));
+        final Project project = new Project();
+        final File tmpFile = getFileUtils().createTempFile(project, null, null, null, true, true);
+        final String autoTempDir = project.getProperty("ant.auto.tmpdir");
+        assertNotNull(autoTempDir);
+        final File tmpFile2 = getFileUtils().createTempFile(project, null, null, null, true, true);
+        assertTrue(tmpFile2 + " must be child of " + autoTempDir,
+                   tmpFile2.getAbsolutePath().startsWith(autoTempDir));
+    }
+
+    @Test
+    public void createTempFileDoesntReusesAutoTmpDirIfDeleteOnExitIsFalse() throws IOException {
+        assumeFalse("Test doesn't run on DOS", Os.isFamily("dos"));
+        final Project project = new Project();
+        final File tmpFile = getFileUtils().createTempFile(project, null, null, null, true, true);
+        final String autoTempDir = project.getProperty("ant.auto.tmpdir");
+        assertNotNull(autoTempDir);
+        final File tmpFile2 = getFileUtils().createTempFile(project, null, null, null, false, true);
+        assertFalse(tmpFile2 + " must not be child of " + autoTempDir,
+                    tmpFile2.getAbsolutePath().startsWith(autoTempDir));
+    }
+
     /**
      * Test contentEquals
      */
@@ -458,10 +522,10 @@ public class FileUtilsTest {
         assertTrue("Non existing files",
                 getFileUtils().contentEquals(new File(ROOT, "foo"),
                         new File(ROOT, "bar")));
-        assertFalse("One exists, the other one doesn\'t",
+        assertFalse("One exists, the other one doesn't",
                 getFileUtils().contentEquals(new File(ROOT, "foo"),
                         new File(ROOT, "build.xml")));
-        assertFalse("Don\'t compare directories",
+        assertFalse("Don't compare directories",
                 getFileUtils().contentEquals(new File(ROOT, "src"),
                         new File(ROOT, "src")));
         assertTrue("File equals itself",
